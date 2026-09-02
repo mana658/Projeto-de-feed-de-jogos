@@ -13,5 +13,6 @@ model Game {
   title     String
   authorId  String
   sourceUrl String
+  code      String
   createdAt DateTime @default(now())
 }
