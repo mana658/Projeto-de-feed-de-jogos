@@ -3,8 +3,6 @@ const cors = require('cors');
 const http = require('http');
 const { Server } = require('socket.io');
 const { PrismaClient } = require('@prisma/client');
-const fs = require('fs'); 
-const path = require('path'); 
 
 const app = express();
 const server = http.createServer(app);
@@ -17,18 +15,20 @@ app.use(cors({ origin: "*" }));
 app.use(express.json());
 
 // =========================================================
-// O INTERCEPTADOR FANTASMA (Deve ficar ANTES do express.static)
+// Rota para Servir o Jogo Direto do Banco (Substitui arquivos físicos)
 // =========================================================
-app.get('/games/:filename', (req, res, next) => {
-    if (req.query.raw === 'true') {
-        return next(); 
-    }
+app.get('/api/games/:id/raw', async (req, res) => {
+    try {
+        const gameId = parseInt(req.params.id);
+        const game = await prisma.game.findUnique({
+            where: { id: gameId }
+        });
 
-    const filePath = path.join(__dirname, 'public', 'games', req.params.filename);
-    
-    if (fs.existsSync(filePath)) {
-        let rawHtml = fs.readFileSync(filePath, 'utf-8');
-        
+        if (!game || !game.code) {
+            return res.status(404).send('<h1>Jogo não encontrado</h1>');
+        }
+
+        // Script de fuga para o botão ESC funcionar dentro do iframe
         const systemScript = `
         <script>
             document.addEventListener('keydown', function(e) {
@@ -38,17 +38,15 @@ app.get('/games/:filename', (req, res, next) => {
             });
         </script>
         `;
-        
-        res.send(rawHtml + systemScript);
-    } else {
-        next();
+
+        res.send(game.code + systemScript);
+    } catch (error) {
+        console.error("Erro ao carregar código do jogo:", error);
+        res.status(500).send('Erro interno');
     }
 });
 
-// Arquivos estáticos normais
-app.use(express.static('public'));
-
-// Rota para criar um novo jogo direto pelo formulário
+// Rota para criar um novo jogo salvando direto no Supabase
 app.post('/api/games', async (req, res) => {
     const { title, authorId, code } = req.body;
 
@@ -57,28 +55,23 @@ app.post('/api/games', async (req, res) => {
     }
 
     try {
-        const cleanSlug = title.toLowerCase().trim().replace(/[^a-z0-9]/g, '-');
-        const fileName = `${cleanSlug}-${Date.now()}.html`;
-        const gamesDir = path.join(__dirname, 'public', 'games');
-
-        if (!fs.existsSync(gamesDir)) {
-            fs.mkdirSync(gamesDir, { recursive: true });
-        }
-
-        const filePath = path.join(gamesDir, fileName);
-        fs.writeFileSync(filePath, code, 'utf-8');
-
-        // URL dinâmica baseada no host atual (Render ou Localhost)
-        const host = req.get('host');
-        const protocol = req.protocol;
-        const sourceUrl = `${protocol}://${host}/games/${fileName}`;
-
+        // Criamos um registro temporário para obter o ID
         const newGame = await prisma.game.create({
-            data: { title, authorId, sourceUrl }
+            data: { title, authorId, code, sourceUrl: '' }
         });
 
-        console.log(`🎮 Jogo "${title}" criado e salvo limpo em: ${fileName}`);
-        res.status(201).json(newGame);
+        // Atualizamos o sourceUrl apontando para a API dinâmica do próprio ID
+        const host = req.get('host');
+        const protocol = req.protocol;
+        const sourceUrl = `${protocol}://${host}/api/games/${newGame.id}/raw`;
+
+        const updatedGame = await prisma.game.update({
+            where: { id: newGame.id },
+            data: { sourceUrl }
+        });
+
+        console.log(`🎮 Jogo "${title}" criado e salvo no Supabase com sucesso!`);
+        res.status(201).json(updatedGame);
     } catch (error) {
         console.error("Erro ao criar jogo:", error);
         res.status(500).json({ error: 'Erro interno ao salvar o jogo.' });
@@ -118,19 +111,25 @@ app.get('/api/feed', async (req, res) => {
     }
 });
 
-// Rota para Salvar o Código no Servidor (pós-edição)
-app.post('/api/save', (req, res) => {
+// Rota para Salvar o Código Atualizado (pós-edição no CollabEditor)
+app.post('/api/save', async (req, res) => {
     const { sourceUrl, code } = req.body;
     try {
-        const fileName = sourceUrl.split('/').pop().split('?')[0]; 
-        const filePath = path.join(__dirname, 'public', 'games', fileName);
+        // Extrai o ID do jogo através da sourceUrl
+        const parts = sourceUrl.split('/');
+        const gameId = parseInt(parts[parts.indexOf('games') + 1] || parts[parts.length - 2]);
 
-        fs.writeFileSync(filePath, code);
+        if (!isNaN(gameId)) {
+            await prisma.game.update({
+                where: { id: gameId },
+                data: { code }
+            });
+        }
 
         io.emit('gameFileUpdated', { sourceUrl });
-        res.json({ message: 'Jogo atualizado com sucesso!' });
+        res.json({ message: 'Jogo atualizado com sucesso no banco!' });
     } catch (error) {
-        console.error("Erro ao salvar arquivo:", error);
+        console.error("Erro ao salvar código:", error);
         res.status(500).json({ error: 'Erro interno ao salvar' });
     }
 });
