@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { background: #1a1a24; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; color: white; font-family: sans-serif; overflow: hidden; }
+        canvas { background: #000; border: 4px solid #a855f7; border-radius: 8px; box-shadow: 0 0 20px rgba(168, 85, 247, 0.4); outline: none; cursor: crosshair; }
+        h1 { margin-bottom: 5px; font-size: 24px; color: #a855f7; font-weight: bold; margin-top: -20px;}
+        p { color: #888; font-size: 13px; margin-bottom: 15px; text-align: center; line-height: 1.4; }
+        .highlight { color: #a855f7; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>Asteroids Retro</h1>
+    <p>Use <span class="highlight">SETAS (Esq/Dir)</span> para girar, <span class="highlight">CIMA</span> para acelerar, <span class="highlight">ESPAÇO</span> para atirar<br/>Aperte <span class="highlight">ESC</span> para sair do jogo e voltar ao feed</p>
+    
+    <canvas id="gameCanvas" width="400" height="400" tabindex="1"></canvas>
+    
+    <script>
+        const canvas = document.getElementById("gameCanvas");
+        const ctx = canvas.getContext("2d");
+        
+        const FPS = 30;
+        const SHIP_SIZE = 20;
+        const TURN_SPEED = 360; 
+        const THRUST = 4; 
+        const FRICTION = 0.7; 
+        
+        let ship = {
+            x: canvas.width / 2,
+            y: canvas.height / 2,
+            a: 90 / 180 * Math.PI, // Ângulo convertido para radianos
+            r: SHIP_SIZE / 2,
+            rot: 0,
+            thrusting: false,
+            thrust: { x: 0, y: 0 }
+        };
+
+        let lasers = [];
+        let asteroids = [];
+
+        // Cria os asteroides iniciais
+        for(let i = 0; i < 5; i++) {
+            asteroids.push({
+                x: Math.random() * canvas.width,
+                y: Math.random() * canvas.height,
+                r: Math.random() * 20 + 10,
+                xv: (Math.random() - 0.5) * 4,
+                yv: (Math.random() - 0.5) * 4
+            });
+        }
+
+        // 🚀 Grito de socorro (ESC) e Trava de Scroll
+        window.addEventListener("keydown", (e) => {
+            if([32, 37, 38, 39, 40].includes(e.keyCode)) {
+                e.preventDefault(); // Trava scroll
+            }
+            if(e.key === "Escape") {
+                window.parent.postMessage('releaseFocus', '*');
+            }
+            
+            if(e.keyCode === 37) ship.rot = TURN_SPEED / 180 * Math.PI / FPS; // Esquerda
+            if(e.keyCode === 39) ship.rot = -TURN_SPEED / 180 * Math.PI / FPS; // Direita
+            if(e.keyCode === 38) ship.thrusting = true; // Cima
+            if(e.keyCode === 32) lasers.push({ // Atirar (Espaço)
+                x: ship.x + 4 / 3 * ship.r * Math.cos(ship.a),
+                y: ship.y - 4 / 3 * ship.r * Math.sin(ship.a),
+                xv: 10 * Math.cos(ship.a),
+                yv: -10 * Math.sin(ship.a)
+            });
+        });
+
+        window.addEventListener("keyup", (e) => {
+            if(e.keyCode === 37 || e.keyCode === 39) ship.rot = 0;
+            if(e.keyCode === 38) ship.thrusting = false;
+        });
+
+        function update() {
+            ctx.fillStyle = "#121212";
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Mover a nave
+            if (ship.thrusting) {
+                ship.thrust.x += THRUST * Math.cos(ship.a) / FPS;
+                ship.thrust.y -= THRUST * Math.sin(ship.a) / FPS;
+            } else {
+                ship.thrust.x -= FRICTION * ship.thrust.x / FPS;
+                ship.thrust.y -= FRICTION * ship.thrust.y / FPS;
+            }
+            ship.a += ship.rot;
+            ship.x += ship.thrust.x;
+            ship.y += ship.thrust.y;
+
+            // Borda infinita para a nave
+            if (ship.x < 0 - ship.r) ship.x = canvas.width + ship.r;
+            else if (ship.x > canvas.width + ship.r) ship.x = 0 - ship.r;
+            if (ship.y < 0 - ship.r) ship.y = canvas.height + ship.r;
+            else if (ship.y > canvas.height + ship.r) ship.y = 0 - ship.r;
+
+            // Desenhar Nave
+            ctx.strokeStyle = "#a855f7";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(
+                ship.x + 4 / 3 * ship.r * Math.cos(ship.a),
+                ship.y - 4 / 3 * ship.r * Math.sin(ship.a)
+            );
+            ctx.lineTo(
+                ship.x - ship.r * (2 / 3 * Math.cos(ship.a) + Math.sin(ship.a)),
+                ship.y + ship.r * (2 / 3 * Math.sin(ship.a) - Math.cos(ship.a))
+            );
+            ctx.lineTo(
+                ship.x - ship.r * (2 / 3 * Math.cos(ship.a) - Math.sin(ship.a)),
+                ship.y + ship.r * (2 / 3 * Math.sin(ship.a) + Math.cos(ship.a))
+            );
+            ctx.closePath();
+            ctx.stroke();
+
+            // Atualizar e Desenhar Lasers
+            for(let i = lasers.length - 1; i >= 0; i--) {
+                lasers[i].x += lasers[i].xv;
+                lasers[i].y += lasers[i].yv;
+                
+                ctx.fillStyle = "#ff3366";
+                ctx.beginPath();
+                ctx.arc(lasers[i].x, lasers[i].y, 3, 0, Math.PI * 2, false);
+                ctx.fill();
+
+                // Remove laser fora da tela
+                if(lasers[i].x < 0 || lasers[i].x > canvas.width || lasers[i].y < 0 || lasers[i].y > canvas.height) {
+                    lasers.splice(i, 1);
+                }
+            }
+
+            // Atualizar, Desenhar e Checar Colisão dos Asteroides
+            for(let i = asteroids.length - 1; i >= 0; i--) {
+                let a = asteroids[i];
+                a.x += a.xv;
+                a.y += a.yv;
+
+                // Borda infinita
+                if (a.x < 0 - a.r) a.x = canvas.width + a.r;
+                else if (a.x > canvas.width + a.r) a.x = 0 - a.r;
+                if (a.y < 0 - a.r) a.y = canvas.height + a.r;
+                else if (a.y > canvas.height + a.r) a.y = 0 - a.r;
+
+                ctx.strokeStyle = "#4ec0ca";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(a.x, a.y, a.r, 0, Math.PI * 2, false);
+                ctx.stroke();
+
+                // Checa colisão com os lasers
+                for(let j = lasers.length - 1; j >= 0; j--) {
+                    let l = lasers[j];
+                    let dist = Math.sqrt(Math.pow(a.x - l.x, 2) + Math.pow(a.y - l.y, 2));
+                    if(dist < a.r) {
+                        asteroids.splice(i, 1); // Destroi asteroide
+                        lasers.splice(j, 1);    // Destroi laser
+                        
+                        // Cria novos menores se a tela ficar muito limpa
+                        if(asteroids.length < 2) {
+                            asteroids.push({x: Math.random()*canvas.width, y: 0, r: 20, xv: 2, yv: 2});
+                            asteroids.push({x: 0, y: Math.random()*canvas.height, r: 15, xv: -2, yv: -2});
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+        canvas.addEventListener('click', () => canvas.focus());
+
+        
+        setInterval(update, 1000 / FPS);
+    </script>
+</body>
+</html>

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { background: #1a1a24; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; color: white; font-family: sans-serif; overflow: hidden; }
+        #game-container { background: #121212; padding: 20px; border: 4px solid #3b82f6; border-radius: 12px; text-align: center; box-shadow: 0 0 20px rgba(59, 130, 246, 0.4); width: 300px; outline: none; transition: transform 0.1s; }
+        h1 { margin: 0 0 5px 0; font-size: 26px; color: #3b82f6; }
+        p { color: #888; font-size: 13px; margin-bottom: 20px; line-height: 1.4; }
+        .highlight { color: #3b82f6; font-weight: bold; }
+        #color-display { width: 100%; height: 120px; border-radius: 8px; margin-bottom: 20px; transition: background 0.1s; border: 2px solid #333; }
+        .options { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+        .option-btn { height: 60px; border: 2px solid #333; border-radius: 8px; cursor: pointer; transition: transform 0.1s; outline: none; }
+        .option-btn:hover { transform: scale(1.05); border-color: #fff; }
+        .option-btn:active { transform: scale(0.95); }
+        #score-board { margin-top: 20px; font-size: 20px; font-weight: bold; color: #fff; }
+        
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            25% { transform: translateX(-8px); }
+            50% { transform: translateX(8px); }
+            75% { transform: translateX(-8px); }
+        }
+        .shake-animation { animation: shake 0.3s; border-color: #ff3366 !important; box-shadow: 0 0 20px rgba(255, 51, 102, 0.6) !important; }
+    </style>
+</head>
+<body>
+    <!-- O tabindex=1 permite que a div inteira receba o foco e os comandos do teclado -->
+    <div id="game-container" tabindex="1">
+        <h1>Color Match</h1>
+        <p>Clique na opção com a mesma cor do quadro superior.<br/>Aperte <span class="highlight">ESC</span> para sair do jogo.</p>
+        
+        <div id="color-display"></div>
+        <div class="options">
+            <button class="option-btn" id="btn-0"></button>
+            <button class="option-btn" id="btn-1"></button>
+            <button class="option-btn" id="btn-2"></button>
+            <button class="option-btn" id="btn-3"></button>
+        </div>
+        
+        <div id="score-board">Pontos: <span id="score">0</span></div>
+    </div>
+
+    <script>
+        let score = 0;
+        const scoreEl = document.getElementById('score');
+        const displayEl = document.getElementById('color-display');
+        const buttons = [
+            document.getElementById('btn-0'),
+            document.getElementById('btn-1'),
+            document.getElementById('btn-2'),
+            document.getElementById('btn-3')
+        ];
+        const container = document.getElementById('game-container');
+
+        // Gera uma cor RGB aleatória
+        function randomColor() {
+            const r = Math.floor(Math.random() * 256);
+            const g = Math.floor(Math.random() * 256);
+            const b = Math.floor(Math.random() * 256);
+            return `rgb(${r}, ${g}, ${b})`;
+        }
+
+        // Inicia uma nova rodada
+        function initRound() {
+            const colors = [randomColor(), randomColor(), randomColor(), randomColor()];
+            const targetIndex = Math.floor(Math.random() * 4);
+            const targetColor = colors[targetIndex];
+
+            displayEl.style.backgroundColor = targetColor;
+
+            buttons.forEach((btn, index) => {
+                btn.style.backgroundColor = colors[index];
+                btn.onclick = () => {
+                    if (index === targetIndex) {
+                        score++;
+                        scoreEl.innerText = score;
+                        initRound();
+                    } else {
+                        score = 0;
+                        scoreEl.innerText = score;
+                        
+                        // Efeito visual de erro
+                        container.classList.add('shake-animation');
+                        setTimeout(() => container.classList.remove('shake-animation'), 300);
+                        
+                        initRound();
+                    }
+                };
+            });
+        }
+
+        // Foca automaticamente no jogo ao clicar
+        container.addEventListener('click', () => container.focus());
+        container.focus();
+
+        // 🚀 O Grito de Socorro para o Next.js
+        window.addEventListener("keydown", (e) => {
+            if (e.key === "Escape") {
+                window.parent.postMessage('releaseFocus', '*');
+            }
+        });
+
+        initRound();
+    </script>
+</body>
+</html>

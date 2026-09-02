@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <style>
+        body { background: #1a1a24; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; margin: 0; color: white; font-family: sans-serif; overflow: hidden; }
+        .game-board { background: #121212; padding: 20px; border: 4px solid #f59e0b; border-radius: 12px; box-shadow: 0 0 20px rgba(245, 158, 11, 0.4); outline: none; display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        h1 { margin-bottom: 5px; font-size: 24px; color: #f59e0b; font-weight: bold; margin-top: -20px;}
+        p { color: #888; font-size: 13px; margin-bottom: 15px; text-align: center; }
+        .highlight { color: #f59e0b; font-weight: bold; }
+        .card { width: 60px; height: 60px; background: #333; border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 30px; cursor: pointer; transition: transform 0.2s, background 0.2s; user-select: none; perspective: 1000px; }
+        .card:hover { transform: scale(1.05); }
+        .card.flipped { background: #f59e0b; cursor: default; }
+        .card.matched { background: #10b981; cursor: default; opacity: 0.8; transform: scale(0.95); }
+        .card .emoji { display: none; }
+        .card.flipped .emoji, .card.matched .emoji { display: block; animation: popIn 0.3s; }
+        
+        @keyframes popIn {
+            0% { transform: scale(0.5); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+    </style>
+</head>
+<body>
+    <h1>Memory Rush</h1>
+    <p>Encontre os pares!<br/>Aperte <span class="highlight">ESC</span> para sair do jogo e voltar ao feed</p>
+
+    <!-- O tabuleiro recebe o foco para escutar o ESC -->
+    <div class="game-board" id="board" tabindex="1">
+        <!-- As cartas são injetadas pelo JavaScript aqui -->
+    </div>
+
+    <script>
+        const board = document.getElementById("board");
+        // Emojis que serão os pares do jogo
+        const emojis = ['👾', '🚀', '⭐', '🔥', '💎', '🍔', '🎸', '🕹️'];
+        let cards = [...emojis, ...emojis];
+        let hasFlippedCard = false;
+        let lockBoard = false;
+        let firstCard, secondCard;
+        let matches = 0;
+
+        // Embaralha as cartas aleatoriamente
+        cards.sort(() => 0.5 - Math.random());
+
+        // Monta o tabuleiro na tela
+        cards.forEach(emoji => {
+            const card = document.createElement('div');
+            card.classList.add('card');
+            card.dataset.emoji = emoji;
+
+            const emojiSpan = document.createElement('span');
+            emojiSpan.classList.add('emoji');
+            emojiSpan.innerText = emoji;
+            
+            card.appendChild(emojiSpan);
+            card.addEventListener('click', flipCard);
+            board.appendChild(card);
+        });
+
+        // Lógica de virar a carta
+        function flipCard() {
+            if (lockBoard) return;
+            if (this === firstCard) return;
+
+            this.classList.add('flipped');
+
+            if (!hasFlippedCard) {
+                // Primeira carta clicada
+                hasFlippedCard = true;
+                firstCard = this;
+                return;
+            }
+
+            // Segunda carta clicada
+            secondCard = this;
+            checkForMatch();
+        }
+
+        // Verifica se formou par
+        function checkForMatch() {
+            let isMatch = firstCard.dataset.emoji === secondCard.dataset.emoji;
+            isMatch ? disableCards() : unflipCards();
+        }
+
+        // Se acertou, desabilita os cliques nessas cartas e muda a cor
+        function disableCards() {
+            firstCard.classList.replace('flipped', 'matched');
+            secondCard.classList.replace('flipped', 'matched');
+            
+            firstCard.removeEventListener('click', flipCard);
+            secondCard.removeEventListener('click', flipCard);
+            
+            resetBoard();
+            matches++;
+            
+            if(matches === emojis.length) {
+                setTimeout(() => alert("Você Venceu! O tabuleiro foi limpo."), 300);
+            }
+        }
+
+        // Se errou, vira as cartas de volta depois de 1 segundo
+        function unflipCards() {
+            lockBoard = true;
+            setTimeout(() => {
+                firstCard.classList.remove('flipped');
+                secondCard.classList.remove('flipped');
+                resetBoard();
+            }, 1000);
+        }
+
+        // Prepara as variáveis para a próxima jogada
+        function resetBoard() {
+            [hasFlippedCard, lockBoard] = [false, false];
+            [firstCard, secondCard] = [null, null];
+        }
+
+        // Foco automático para o ESC funcionar
+        board.addEventListener('click', () => board.focus());
+        board.focus();
+
+        // 🚀 O Grito de Socorro para o Next.js
+        window.addEventListener("keydown", (e) => {
+            if([32, 37, 38, 39, 40].includes(e.keyCode)) {
+                e.preventDefault(); // Trava scroll da página ao usar setas
+            }
+            if(e.key === "Escape") {
+                window.parent.postMessage('releaseFocus', '*');
+            }
+        });
+    </script>
+</body>
+</html>
