@@ -9,18 +9,17 @@ const path = require('path');
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-    cors: { origin: "http://localhost:3000", methods: ["GET", "POST"] }
+    cors: { origin: "*", methods: ["GET", "POST"] }
 });
 const prisma = new PrismaClient(); 
 
-app.use(cors());
+app.use(cors({ origin: "*" }));
 app.use(express.json());
 
 // =========================================================
 // O INTERCEPTADOR FANTASMA (Deve ficar ANTES do express.static)
 // =========================================================
 app.get('/games/:filename', (req, res, next) => {
-    // Se o seu editor pedir o código puro para edição, ignora a injeção
     if (req.query.raw === 'true') {
         return next(); 
     }
@@ -30,7 +29,6 @@ app.get('/games/:filename', (req, res, next) => {
     if (fs.existsSync(filePath)) {
         let rawHtml = fs.readFileSync(filePath, 'utf-8');
         
-        // O Script Indestrutível do Sistema
         const systemScript = `
         <script>
             document.addEventListener('keydown', function(e) {
@@ -41,7 +39,6 @@ app.get('/games/:filename', (req, res, next) => {
         </script>
         `;
         
-        // Devolve o HTML injetado para o Iframe
         res.send(rawHtml + systemScript);
     } else {
         next();
@@ -68,11 +65,13 @@ app.post('/api/games', async (req, res) => {
             fs.mkdirSync(gamesDir, { recursive: true });
         }
 
-        // Salva 100% puro no disco
         const filePath = path.join(gamesDir, fileName);
         fs.writeFileSync(filePath, code, 'utf-8');
 
-        const sourceUrl = `http://localhost:3001/games/${fileName}`;
+        // URL dinâmica baseada no host atual (Render ou Localhost)
+        const host = req.get('host');
+        const protocol = req.protocol;
+        const sourceUrl = `${protocol}://${host}/games/${fileName}`;
 
         const newGame = await prisma.game.create({
             data: { title, authorId, sourceUrl }
@@ -126,7 +125,6 @@ app.post('/api/save', (req, res) => {
         const fileName = sourceUrl.split('/').pop().split('?')[0]; 
         const filePath = path.join(__dirname, 'public', 'games', fileName);
 
-        // Salva puro de novo!
         fs.writeFileSync(filePath, code);
 
         io.emit('gameFileUpdated', { sourceUrl });
@@ -144,7 +142,7 @@ io.on('connection', (socket) => {
     });
 });
 
-const PORT = 3001;
+const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
     console.log(`Servidor API e WebSockets rodando na porta ${PORT}`);
 });
