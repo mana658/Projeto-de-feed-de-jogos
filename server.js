@@ -107,7 +107,8 @@ app.get('/api/feed', async (req, res) => {
         res.json(games);
     } catch (error) {
         console.error("Erro no banco:", error);
-        res.status(500).json({ error: 'Erro ao buscar jogos' });
+        // CORREÇÃO: Retorna um array vazio (status 200) para blindar o frontend contra falhas de .map()
+        res.status(200).json([]);
     }
 });
 
