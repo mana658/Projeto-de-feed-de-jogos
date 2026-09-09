@@ -15,7 +15,7 @@ app.use(cors({ origin: "*" }));
 app.use(express.json());
 
 // =========================================================
-// Rota para Servir o Jogo Direto do Banco (Substitui arquivos físicos)
+// Rota para Servir o Jogo Direto do Banco
 // =========================================================
 app.get('/api/games/:id/raw', async (req, res) => {
     try {
@@ -28,7 +28,6 @@ app.get('/api/games/:id/raw', async (req, res) => {
             return res.status(404).send('<h1>Jogo não encontrado</h1>');
         }
 
-        // Script de fuga para o botão ESC funcionar dentro do iframe
         const systemScript = `
         <script>
             document.addEventListener('keydown', function(e) {
@@ -46,7 +45,9 @@ app.get('/api/games/:id/raw', async (req, res) => {
     }
 });
 
-// Rota para criar um novo jogo salvando direto no Supabase
+// =========================================================
+// Rota para criar um novo jogo
+// =========================================================
 app.post('/api/games', async (req, res) => {
     const { title, authorId, code } = req.body;
 
@@ -55,12 +56,10 @@ app.post('/api/games', async (req, res) => {
     }
 
     try {
-        // Criamos um registro temporário para obter o ID
         const newGame = await prisma.game.create({
             data: { title, authorId, code, sourceUrl: '' }
         });
 
-        // Atualizamos o sourceUrl apontando para a API dinâmica do próprio ID
         const host = req.get('host');
         const protocol = req.protocol;
         const sourceUrl = `${protocol}://${host}/api/games/${newGame.id}/raw`;
@@ -70,53 +69,43 @@ app.post('/api/games', async (req, res) => {
             data: { sourceUrl }
         });
 
-        console.log(`🎮 Jogo "${title}" criado e salvo no Supabase com sucesso!`);
         res.status(201).json(updatedGame);
     } catch (error) {
-        console.error("Erro ao criar jogo:", error);
         res.status(500).json({ error: 'Erro interno ao salvar o jogo.' });
     }
 });
 
-// Rota de Feed Infinito Circular
+// =========================================================
+// Rota de Feed (MODO DIAGNÓSTICO PROFUNDO)
+// =========================================================
 app.get('/api/feed', async (req, res) => {
-    const page = parseInt(req.query.page) || 1;
-    const limit = 2;
-
     try {
-        const totalGames = await prisma.game.count();
-        if (totalGames === 0) return res.json([]);
+        // Tenta puxar tudo sem filtros para testar a saúde da tabela
+        const count = await prisma.game.count();
+        const allGames = await prisma.game.findMany();
 
-        const skip = ((page - 1) * limit) % totalGames;
-
-        let games = await prisma.game.findMany({
-            skip: skip,
-            take: limit,
-            orderBy: { id: 'asc' }
+        res.status(200).json({
+            status: "✅ Conexão bem-sucedida com o Supabase!",
+            jogosEncontrados: count,
+            dica: count === 0 ? "O Prisma conectou, mas ele enxerga a tabela Game zerada." : "Jogos carregados!",
+            dados: allGames
         });
-
-        if (games.length < limit) {
-            const complement = await prisma.game.findMany({
-                skip: 0,
-                take: limit - games.length,
-                orderBy: { id: 'asc' }
-            });
-            games = [...games, ...complement];
-        }
-
-        res.json(games);
     } catch (error) {
-        console.error("Erro no banco:", error);
-        // CORREÇÃO: Retorna um array vazio (status 200) para blindar o frontend contra falhas de .map()
-        res.status(200).json([]);
+        // Agora o erro não é escondido, ele vai direto pra tela do navegador!
+        res.status(200).json({
+            status: "❌ Erro Fatal no Prisma",
+            codigoDoErro: error.code,
+            mensagemExata: error.message
+        });
     }
 });
 
-// Rota para Salvar o Código Atualizado (pós-edição no CollabEditor)
+// =========================================================
+// Rota para Salvar o Código Atualizado
+// =========================================================
 app.post('/api/save', async (req, res) => {
     const { sourceUrl, code } = req.body;
     try {
-        // Extrai o ID do jogo através da sourceUrl
         const parts = sourceUrl.split('/');
         const gameId = parseInt(parts[parts.indexOf('games') + 1] || parts[parts.length - 2]);
 
@@ -130,7 +119,6 @@ app.post('/api/save', async (req, res) => {
         io.emit('gameFileUpdated', { sourceUrl });
         res.json({ message: 'Jogo atualizado com sucesso no banco!' });
     } catch (error) {
-        console.error("Erro ao salvar código:", error);
         res.status(500).json({ error: 'Erro interno ao salvar' });
     }
 });
@@ -144,5 +132,5 @@ io.on('connection', (socket) => {
 
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, () => {
-    console.log(`Servidor API e WebSockets rodando na porta ${PORT}`);
+    console.log(`Servidor rodando na porta ${PORT}`);
 });
