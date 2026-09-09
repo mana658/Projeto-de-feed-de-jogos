@@ -75,28 +75,37 @@ app.post('/api/games', async (req, res) => {
     }
 });
 
-// =========================================================
-// Rota de Feed (MODO DIAGNÓSTICO PROFUNDO)
-// =========================================================
 app.get('/api/feed', async (req, res) => {
-    try {
-        // Tenta puxar tudo sem filtros para testar a saúde da tabela
-        const count = await prisma.game.count();
-        const allGames = await prisma.game.findMany();
+    const page = parseInt(req.query.page) || 1;
+    const limit = 2;
 
-        res.status(200).json({
-            status: "✅ Conexão bem-sucedida com o Supabase!",
-            jogosEncontrados: count,
-            dica: count === 0 ? "O Prisma conectou, mas ele enxerga a tabela Game zerada." : "Jogos carregados!",
-            dados: allGames
+    try {
+        const totalGames = await prisma.game.count();
+        if (totalGames === 0) return res.json([]);
+
+        const skip = ((page - 1) * limit) % totalGames;
+
+        let games = await prisma.game.findMany({
+            skip: skip,
+            take: limit,
+            orderBy: { id: 'asc' }
         });
+
+        if (games.length < limit) {
+            const complement = await prisma.game.findMany({
+                skip: 0,
+                take: limit - games.length,
+                orderBy: { id: 'asc' }
+            });
+            games = [...games, ...complement];
+        }
+
+        // Devolve EXATAMENTE o que o frontend espera: um Array de jogos!
+        res.json(games);
     } catch (error) {
-        // Agora o erro não é escondido, ele vai direto pra tela do navegador!
-        res.status(200).json({
-            status: "❌ Erro Fatal no Prisma",
-            codigoDoErro: error.code,
-            mensagemExata: error.message
-        });
+        console.error("Erro no banco:", error);
+        // Trava de segurança mantida
+        res.status(200).json([]);
     }
 });
 
