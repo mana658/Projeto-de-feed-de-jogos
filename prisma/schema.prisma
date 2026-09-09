@@ -9,10 +9,10 @@ datasource db {
 }
 
 model Game {
-  id        String   @id @default(uuid())
+  id        Int      @id @default(autoincrement())
   title     String
   authorId  String
   sourceUrl String
-  code      String
+  code      String?
   createdAt DateTime @default(now())
 }
