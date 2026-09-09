@@ -112,23 +112,40 @@ app.get('/api/feed', async (req, res) => {
 // =========================================================
 // Rota para Salvar o Código Atualizado
 // =========================================================
+// =========================================================
+// Rota para Salvar o Código Atualizado (pós-edição no Editor)
+// =========================================================
 app.post('/api/save', async (req, res) => {
-    const { sourceUrl, code } = req.body;
-    try {
-        const parts = sourceUrl.split('/');
-        const gameId = parseInt(parts[parts.indexOf('games') + 1] || parts[parts.length - 2]);
+    // Agora aceita tanto o ID direto quanto a sourceUrl para ser à prova de falhas
+    const { id, sourceUrl, code } = req.body;
 
-        if (!isNaN(gameId)) {
-            await prisma.game.update({
-                where: { id: gameId },
-                data: { code }
-            });
+    try {
+        let gameId = id;
+
+        // Se o frontend mandar a sourceUrl em vez do ID, extraímos o número dela
+        if (!gameId && sourceUrl) {
+            const parts = sourceUrl.split('/');
+            gameId = parseInt(parts[parts.indexOf('games') + 1] || parts[parts.length - 2]);
         }
 
+        if (!gameId || isNaN(gameId)) {
+            return res.status(400).json({ error: 'ID do jogo não encontrado para salvar.' });
+        }
+
+        // Atualiza a coluna 'code' do jogo específico no Supabase
+        await prisma.game.update({
+            where: { id: parseInt(gameId) },
+            data: { code }
+        });
+
+        // Dispara o evento via WebSocket para atualizar a tela de quem estiver jogando
         io.emit('gameFileUpdated', { sourceUrl });
-        res.json({ message: 'Jogo atualizado com sucesso no banco!' });
+        
+        console.log(`✅ Código do jogo #${gameId} salvo com sucesso no banco!`);
+        res.status(200).json({ message: 'Jogo atualizado com sucesso no banco!' });
     } catch (error) {
-        res.status(500).json({ error: 'Erro interno ao salvar' });
+        console.error("Erro ao salvar código no banco:", error);
+        res.status(500).json({ error: 'Erro interno ao salvar o código.' });
     }
 });
 
