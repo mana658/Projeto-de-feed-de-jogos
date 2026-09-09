@@ -61,7 +61,10 @@ app.post('/api/games', async (req, res) => {
         });
 
         const host = req.get('host');
-        const protocol = req.protocol;
+        // =========================================================
+        // CORREÇÃO APLICADA: Lê o protocolo real do Render ou força HTTPS
+        // =========================================================
+        const protocol = req.headers['x-forwarded-proto'] || 'https'; 
         const sourceUrl = `${protocol}://${host}/api/games/${newGame.id}/raw`;
 
         const updatedGame = await prisma.game.update({
@@ -75,6 +78,9 @@ app.post('/api/games', async (req, res) => {
     }
 });
 
+// =========================================================
+// Rota de Feed Infinito Circular
+// =========================================================
 app.get('/api/feed', async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limit = 2;
@@ -109,9 +115,6 @@ app.get('/api/feed', async (req, res) => {
     }
 });
 
-// =========================================================
-// Rota para Salvar o Código Atualizado
-// =========================================================
 // =========================================================
 // Rota para Salvar o Código Atualizado (pós-edição no Editor)
 // =========================================================
